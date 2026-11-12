@@ -14,7 +14,18 @@ Export X (Twitter) Articles into cleanly structured, publication-grade PDFs dire
 - **Supported Links**: `x.com/<user>/status/<id>`, `x.com/<user>/article/<id>`, `x.com/i/article/<id>`, `twitter.com`, `fxtwitter.com`, `fixupx.com`, `vxtwitter.com`, and `fixvx.com`.
 - **In-Place `Watch on X` Video Cards**: Replaces raw video players and animated GIFs in-place with clickable **Watch on X** link cards (plus optional static poster thumbnails via `--video-poster`).
 - **Text-Only & Rich Embedded Post Hydration**: Hydrates embedded X posts inline—including text-only posts without images, nested quote posts, polls, link cards, and image grids.
-- **Editorial Typography & Print Controls**: Bundled offline WOFF2 fonts (`Newsreader`, `Inter`, `JetBrains Mono`), `editorial` / `sans` / `technical` presets, `light` / `ivory` / `dark` paper modes, `A4` / `Letter` sizing, `compact` / `balanced` / `generous` margins, optional Table of Contents, running headers/footers, and clickable vector link annotations.
+- **Editorial Typography & Print Controls**: Bundled offline WOFF/WOFF2 fonts (`Newsreader`, `Inter`, `JetBrains Mono`), `editorial` / `sans` / `technical` presets, `light` / `ivory` / `dark` paper modes, `A4` / `Letter` sizing, `compact` / `balanced` / `generous` margins, optional Table of Contents, running headers/footers, and clickable vector link annotations.
+- **Website & Serverless Ready (Netlify)**: Deploys cleanly as a public web app via [`netlify.toml`](netlify.toml) and `netlify/functions/*` (`health`, `extract`, SSRF-guarded `media-proxy`), generating instant browser preview, HTML, Markdown, and downloadable clickable vector PDFs/ZIPs directly in the browser without requiring headless Chromium on the server.
+
+## Deploy as Website (Netlify)
+
+This repository includes zero-config Netlify support via [`netlify.toml`](netlify.toml):
+
+- **Build command:** `npm run build`
+- **Publish directory:** `dist/web`
+- **Functions directory:** `netlify/functions` (mapped cleanly from `/api/*` via Netlify redirects)
+
+Push updates to your connected GitHub branch and Netlify automatically builds the static Web Studio and serverless extraction functions.
 
 ## Setup
 

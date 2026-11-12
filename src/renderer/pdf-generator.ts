@@ -1,8 +1,11 @@
 import { existsSync } from "node:fs";
 import { chromium, type Browser } from "playwright-core";
 import type { ArticleDocument, RenderOptions } from "../core/types.js";
+import { buildPdfFilename } from "./filename.js";
 import { buildArticleHtml, escapeHtml } from "./html-builder.js";
 import { getMarginMm } from "./styles.js";
+
+export { buildPdfFilename };
 
 const CANDIDATE_BROWSER_PATHS = [
   process.env.CHROMIUM_PATH,
@@ -80,16 +83,7 @@ export async function closePdfBrowser(): Promise<void> {
   }
 }
 
-export function buildPdfFilename(doc: ArticleDocument): string {
-  const handle = doc.author.handle.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "x";
-  const slug =
-    doc.title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 60) || doc.id;
-  return `${handle}-${slug}.pdf`;
-}
+// buildPdfFilename moved to ./filename.js
 
 export async function generateArticlePdf(
   doc: ArticleDocument,

@@ -5,6 +5,7 @@ import express, { type Express } from "express";
 import { z } from "zod";
 import { DEFAULT_RENDER_OPTIONS, type ArticleDocument, type RenderOptions } from "../core/types.js";
 import { extractArticle } from "../extractor/index.js";
+import { fetchProxiedMedia } from "../extractor/media-proxy.js";
 import { extractXUrlsFromText } from "../extractor/url.js";
 import { buildArticleHtml } from "../renderer/html-builder.js";
 import { buildArticleMarkdown } from "../renderer/markdown.js";
@@ -64,9 +65,24 @@ export function createApp(): Express {
     const browserExecutable = findBrowserExecutable();
     res.json({
       ok: true,
+      mode: "local",
       browserReady: Boolean(browserExecutable),
+      clientPdfReady: true,
+      browserFallbackAvailable: true,
       browserExecutable: browserExecutable ?? null
     });
+  });
+
+  app.get("/api/media-proxy", async (req, res) => {
+    const rawUrl = typeof req.query.url === "string" ? req.query.url : "";
+    const result = await fetchProxiedMedia(rawUrl);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(result.bytes));
   });
 
   app.post("/api/extract", async (req, res) => {

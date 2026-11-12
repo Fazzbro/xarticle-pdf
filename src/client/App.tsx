@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ClipboardPaste,
@@ -8,11 +8,17 @@ import {
   FileText,
   Loader2,
   Moon,
+  Printer,
   Sparkles,
   Sun,
   Trash2
 } from "lucide-react";
 import type { ArticleDocument, RenderOptions } from "../core/types.js";
+import { buildPdfFilename } from "../renderer/filename.js";
+import { buildArticleHtmlCore } from "../renderer/html-builder-core.js";
+import { buildArticleMarkdown } from "../renderer/markdown.js";
+import { getClientPreviewFontCss } from "./lib/client-fonts.js";
+import { buildClientPdfExportBlob } from "./lib/client-pdf.js";
 import { AnimatedBackground } from "./components/motion-primitives/animated-background.js";
 import { AnimatedNumber } from "./components/motion-primitives/animated-number.js";
 import { BorderTrail } from "./components/motion-primitives/border-trail.js";
@@ -67,11 +73,19 @@ function triggerBlobDownload(blob: Blob, filename: string) {
 
 export default function App() {
   const [darkUi, setDarkUi] = useState(false);
-  const [health, setHealth] = useState<{ ready: boolean; label: string }>({
+  const [health, setHealth] = useState<{
+    ready: boolean;
+    label: string;
+    serverPdfReady: boolean;
+    browserFallbackAvailable: boolean;
+  }>({
     ready: false,
-    label: "Checking engine…"
+    label: "Checking engine…",
+    serverPdfReady: false,
+    browserFallbackAvailable: false
   });
 
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [urlInput, setUrlInput] = useState("");
   const [allowBrowserFallback, setAllowBrowserFallback] = useState(true);
   const [extracting, setExtracting] = useState(false);
@@ -88,6 +102,7 @@ export default function App() {
 
   const activeArticle = articles[activeIndex] ?? null;
   const detectedLinkCount = useMemo(() => countInputLinks(urlInput), [urlInput]);
+  const clientFontCss = useMemo(() => getClientPreviewFontCss(), []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkUi);
@@ -97,45 +112,57 @@ export default function App() {
     fetch("/api/health")
       .then((r) => r.json())
       .then((data) => {
+        const hasFallback = Boolean(data.browserFallbackAvailable);
+        if (!hasFallback) {
+          setAllowBrowserFallback(false);
+        }
         if (data.browserReady) {
-          setHealth({ ready: true, label: "PDF Engine Ready" });
+          setHealth({
+            ready: true,
+            label: "PDF Engine Ready",
+            serverPdfReady: true,
+            browserFallbackAvailable: hasFallback
+          });
+        } else if (data.ok && data.clientPdfReady) {
+          setHealth({
+            ready: true,
+            label: "Web PDF Ready",
+            serverPdfReady: false,
+            browserFallbackAvailable: hasFallback
+          });
         } else {
-          setHealth({ ready: false, label: "Browser Missing" });
+          setHealth({
+            ready: true,
+            label: "Client PDF Ready",
+            serverPdfReady: false,
+            browserFallbackAvailable: false
+          });
         }
       })
-      .catch(() => setHealth({ ready: false, label: "Offline" }));
+      .catch(() =>
+        setHealth({
+          ready: true,
+          label: "Client PDF Ready",
+          serverPdfReady: false,
+          browserFallbackAvailable: false
+        })
+      );
   }, []);
 
-  const refreshPreview = useCallback(
-    async (doc: ArticleDocument, renderOpts: RenderOptions) => {
-      try {
-        const res = await fetch("/api/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documentId: doc.id,
-            document: doc,
-            options: renderOpts
-          })
-        });
-        if (!res.ok) throw new Error("Failed to render preview.");
-        const html = await res.text();
-        setPreviewHtml(html);
-      } catch (err) {
-        setStatus({
-          msg: err instanceof Error ? err.message : "Preview render failed.",
-          kind: "error"
-        });
-      }
-    },
-    []
-  );
-
   useEffect(() => {
-    if (activeArticle) {
-      refreshPreview(activeArticle, options);
+    if (!activeArticle) {
+      setPreviewHtml("");
+      return;
     }
-  }, [activeArticle, options, refreshPreview]);
+    try {
+      setPreviewHtml(buildArticleHtmlCore(activeArticle, options, clientFontCss));
+    } catch (err) {
+      setStatus({
+        msg: err instanceof Error ? err.message : "Preview render failed.",
+        kind: "error"
+      });
+    }
+  }, [activeArticle, options, clientFontCss]);
 
   const handleExtract = useCallback(async () => {
     const trimmed = urlInput.trim();
@@ -214,21 +241,30 @@ export default function App() {
     setExportingPdf(true);
     setStatus(null);
     try {
-      const res = await fetch("/api/export-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: articles.map((doc) => ({ documentId: doc.id, document: doc })),
-          options
-        })
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "PDF generation failed.");
+      if (health.serverPdfReady) {
+        try {
+          const res = await fetch("/api/export-pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              items: articles.map((doc) => ({ documentId: doc.id, document: doc })),
+              options
+            })
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            const fallback = articles.length > 1 ? "x-articles-export.zip" : "x-article.pdf";
+            const filename = parseFilenameFromHeader(res.headers.get("Content-Disposition"), fallback);
+            triggerBlobDownload(blob, filename);
+            setStatus({ msg: `Exported ${filename}`, kind: "success" });
+            return;
+          }
+        } catch {
+          // Fall through cleanly to browser vector PDF export
+        }
       }
-      const blob = await res.blob();
-      const fallback = articles.length > 1 ? "x-articles-export.zip" : "x-article.pdf";
-      const filename = parseFilenameFromHeader(res.headers.get("Content-Disposition"), fallback);
+
+      const { blob, filename } = await buildClientPdfExportBlob(articles, options);
       triggerBlobDownload(blob, filename);
       setStatus({ msg: `Exported ${filename}`, kind: "success" });
     } catch (err) {
@@ -241,28 +277,22 @@ export default function App() {
     }
   };
 
-  const handleSecondaryExport = async (endpoint: string, fallbackName: string) => {
+  const handleExportHtml = () => {
     if (!activeArticle) return;
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          documentId: activeArticle.id,
-          document: activeArticle,
-          options
-        })
-      });
-      if (!res.ok) throw new Error("Export failed.");
-      const blob = await res.blob();
-      const filename = parseFilenameFromHeader(res.headers.get("Content-Disposition"), fallbackName);
-      triggerBlobDownload(blob, filename);
-    } catch (err) {
-      setStatus({
-        msg: err instanceof Error ? err.message : "Export failed.",
-        kind: "error"
-      });
-    }
+    const html = buildArticleHtmlCore(activeArticle, options, clientFontCss);
+    const filename = buildPdfFilename(activeArticle).replace(/\.pdf$/i, ".html");
+    triggerBlobDownload(new Blob([html], { type: "text/html;charset=utf-8" }), filename);
+  };
+
+  const handleExportMarkdown = () => {
+    if (!activeArticle) return;
+    const md = buildArticleMarkdown(activeArticle);
+    const filename = buildPdfFilename(activeArticle).replace(/\.pdf$/i, ".md");
+    triggerBlobDownload(new Blob([md], { type: "text/markdown;charset=utf-8" }), filename);
+  };
+
+  const handlePrintPreview = () => {
+    iframeRef.current?.contentWindow?.print();
   };
 
   const openPreviewTab = () => {
@@ -409,10 +439,21 @@ export default function App() {
                     )}
                   </span>
 
-                  <label className="flex cursor-pointer items-center gap-2">
+                  <label
+                    className={cn(
+                      "flex items-center gap-2",
+                      health.browserFallbackAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"
+                    )}
+                    title={
+                      health.browserFallbackAvailable
+                        ? "Fallback to local ego-browser when public X API is blocked"
+                        : "Web mode uses public X API extraction (local browser fallback runs in CLI)"
+                    }
+                  >
                     <span>Browser fallback</span>
                     <Switch
                       checked={allowBrowserFallback}
+                      disabled={!health.browserFallbackAvailable}
                       onCheckedChange={setAllowBrowserFallback}
                       label="Browser fallback"
                     />
@@ -667,7 +708,7 @@ export default function App() {
                 variant="outline"
                 size="sm"
                 disabled={!activeArticle}
-                onClick={() => handleSecondaryExport("/api/export-html", "x-article.html")}
+                onClick={handleExportHtml}
               >
                 <FileCode />
                 HTML
@@ -677,7 +718,7 @@ export default function App() {
                 variant="outline"
                 size="sm"
                 disabled={!activeArticle}
-                onClick={() => handleSecondaryExport("/api/export-markdown", "x-article.md")}
+                onClick={handleExportMarkdown}
               >
                 <FileText />
                 Markdown
@@ -719,6 +760,17 @@ export default function App() {
                   ))}
                 </AnimatedBackground>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!previewHtml}
+                onClick={handlePrintPreview}
+                title="Browser Print / Save as PDF"
+              >
+                <Printer />
+                Print
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -807,11 +859,12 @@ export default function App() {
           ) : (
             <div className="relative min-h-0 flex-1 overflow-auto">
               <iframe
+                ref={iframeRef}
                 id="previewFrame"
                 title="Article Print Preview"
                 srcDoc={previewHtml}
                 onLoad={handleIframeLoad}
-                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals"
                 className="h-full w-full origin-top border-0 bg-[#eaecef]"
                 style={
                   zoom === "fit"
