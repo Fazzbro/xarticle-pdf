@@ -100,6 +100,7 @@ export default function App() {
   });
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeObserverRef = useRef<ResizeObserver | null>(null);
   const previewSectionRef = useRef<HTMLElement>(null);
   const [urlInput, setUrlInput] = useState("");
   const [allowBrowserFallback, setAllowBrowserFallback] = useState(true);
@@ -341,20 +342,44 @@ export default function App() {
     window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
   };
 
+  const syncIframeHeight = useCallback(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc?.body) return;
+    const shell = doc.querySelector<HTMLElement>(".article-shell");
+    const contentHeight = shell
+      ? Math.max(shell.getBoundingClientRect().height + 36, doc.body.scrollHeight)
+      : Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body.scrollHeight);
+    if (contentHeight > 200) {
+      setMobileIframeHeight(Math.ceil(contentHeight) + 24);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!previewHtml || isDesktop) return;
+    const t1 = setTimeout(syncIframeHeight, 60);
+    const t2 = setTimeout(syncIframeHeight, 220);
+    const t3 = setTimeout(syncIframeHeight, 550);
+    const t4 = setTimeout(syncIframeHeight, 1200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
+  }, [previewHtml, isDesktop, syncIframeHeight]);
+
   const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
     const iframe = e.currentTarget;
     const doc = iframe.contentDocument;
     if (!doc) return;
 
-    const syncHeight = () => {
-      const h = Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body?.scrollHeight ?? 0);
-      if (h > 200) {
-        setMobileIframeHeight(h + 24);
-      }
-    };
-    syncHeight();
-    setTimeout(syncHeight, 250);
-    setTimeout(syncHeight, 1000);
+    syncIframeHeight();
+    iframeObserverRef.current?.disconnect();
+    if (typeof ResizeObserver !== "undefined" && doc.body) {
+      const obs = new ResizeObserver(() => syncIframeHeight());
+      obs.observe(doc.body);
+      iframeObserverRef.current = obs;
+    }
 
     doc.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement | null;
