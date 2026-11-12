@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1280, height=640" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "NewsreaderLocal";
+        src: url("assets/fonts/newsreader-latin-400-normal.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "NewsreaderLocal";
+        src: url("assets/fonts/newsreader-latin-400-italic.woff2") format("woff2");
+        font-weight: 400;
+        font-style: italic;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "NewsreaderLocal";
+        src: url("assets/fonts/newsreader-latin-600-normal.woff2") format("woff2");
+        font-weight: 600;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "NewsreaderLocal";
+        src: url("assets/fonts/newsreader-latin-700-normal.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "InterLocal";
+        src: url("assets/fonts/inter-latin-400-normal.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "InterLocal";
+        src: url("assets/fonts/inter-latin-500-normal.woff2") format("woff2");
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "InterLocal";
+        src: url("assets/fonts/inter-latin-600-normal.woff2") format("woff2");
+        font-weight: 600;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "InterLocal";
+        src: url("assets/fonts/inter-latin-700-normal.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "InterLocal";
+        src: url("assets/fonts/inter-latin-800-normal.woff2") format("woff2");
+        font-weight: 800;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "JetBrainsMonoLocal";
+        src: url("assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrainsMonoLocal";
+        src: url("assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrainsMonoLocal";
+        src: url("assets/fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2");
+        font-weight: 600;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrainsMonoLocal";
+        src: url("assets/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        --canvas: #ffffff;
+        --ink: #09090b;
+        --ink-secondary: #3f3f46;
+        --ink-muted: #52525b;
+        --surface: #ffffff;
+        --surface-subtle: #fafafa;
+        --surface-chip: #f4f4f5;
+        --border: rgba(9, 9, 11, 0.12);
+        --border-strong: rgba(9, 9, 11, 0.22);
+        --dot: rgba(9, 9, 11, 0.09);
+        --cta-bg: #09090b;
+        --cta-fg: #ffffff;
+        --pill-bg: #f4f4f5;
+        --pill-fg: #18181b;
+        --shadow-card:
+          0 24px 48px -12px rgba(9, 9, 11, 0.14),
+          0 10px 20px -8px rgba(9, 9, 11, 0.07),
+          0 0 0 1px rgba(9, 9, 11, 0.09);
+        --shadow-cta:
+          0 12px 24px -8px rgba(9, 9, 11, 0.24),
+          0 2px 6px -1px rgba(9, 9, 11, 0.12);
+        --font-sans: "InterLocal", sans-serif;
+        --font-serif: "NewsreaderLocal", serif;
+        --font-mono: "JetBrainsMonoLocal", monospace;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #root {
+        position: relative;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse 74% 78% at 28% 48%, #ffffff 0%, #ffffff 54%, #f6f6f7 100%);
+      }
+
+      .studio-grid {
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(var(--dot) 1.1px, transparent 1.1px);
+        background-size: 20px 20px;
+        mask-image: radial-gradient(ellipse 90% 86% at 52% 50%, #000 58%, transparent 100%);
+        pointer-events: none;
+      }
+
+      .studio-vignette {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 78% 48%, rgba(9, 9, 11, 0.025) 0%, transparent 56%),
+          radial-gradient(ellipse 100% 100% at 50% 50%, transparent 68%, rgba(9, 9, 11, 0.045) 100%);
+        pointer-events: none;
+      }
+
+      .studio-frame-rule {
+        position: absolute;
+        inset: 22px;
+        border: 1px solid rgba(9, 9, 11, 0.075);
+        border-radius: 14px;
+        pointer-events: none;
+      }
+
+      /* Left Typographic Anchor */
+      .hero-clip {
+        position: absolute;
+        left: 58px;
+        top: 66px;
+        width: 500px;
+        height: 508px;
+        z-index: 2;
+      }
+
+      .hero-inner {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--ink);
+        flex-shrink: 0;
+      }
+
+      .accent-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.055em;
+        color: var(--ink);
+        white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(9, 9, 11, 0.04);
+      }
+
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ink);
+        flex-shrink: 0;
+      }
+
+      .headline {
+        font-family: var(--font-sans);
+        font-size: 66px;
+        font-weight: 800;
+        line-height: 0.98;
+        letter-spacing: -0.048em;
+        color: var(--ink);
+        margin-bottom: 18px;
+      }
+
+      .headline-serif {
+        font-family: var(--font-serif);
+        font-weight: 600;
+        font-style: italic;
+        letter-spacing: -0.03em;
+      }
+
+      .lead {
+        font-family: var(--font-sans);
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 1.5;
+        color: var(--ink-secondary);
+        max-width: 468px;
+        margin-bottom: 26px;
+      }
+
+      .action-pills {
+        display: flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
+        margin-bottom: 30px;
+      }
+
+      .action-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        border: 1px solid var(--ink);
+        box-shadow: var(--shadow-cta);
+        white-space: nowrap;
+      }
+
+      .spec-strip {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+
+      .spec-sep {
+        width: 1px;
+        height: 12px;
+        background: var(--border-strong);
+        flex-shrink: 0;
+      }
+
+      /* Right Floating 3D UI Cards */
+      .cards-stage {
+        position: absolute;
+        left: 568px;
+        top: 38px;
+        width: 668px;
+        height: 564px;
+        z-index: 3;
+      }
+
+      .card-slot {
+        position: absolute;
+      }
+
+      .card-slot-a {
+        left: 10px;
+        top: 22px;
+        width: 306px;
+        height: 220px;
+      }
+
+      .card-slot-b {
+        left: 348px;
+        top: 18px;
+        width: 306px;
+        height: 220px;
+      }
+
+      .card-slot-c {
+        left: 6px;
+        top: 282px;
+        width: 310px;
+        height: 244px;
+      }
+
+      .card-slot-d {
+        left: 344px;
+        top: 274px;
+        width: 314px;
+        height: 252px;
+      }
+
+      .ui-card {
+        width: 100%;
+        height: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        border-radius: 14px;
+        padding: 15px 17px;
+        box-shadow: var(--shadow-card);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .card-kicker {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.055em;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .card-tag {
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--pill-bg);
+        border: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--pill-fg);
+        white-space: nowrap;
+      }
+
+      /* Card 1: Clean Editorial Typography */
+      .editorial-sheet {
+        background: var(--surface-subtle);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 11px 12px;
+      }
+
+      .editorial-h1 {
+        font-family: var(--font-serif);
+        font-size: 16.5px;
+        font-weight: 700;
+        line-height: 1.18;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        margin-bottom: 7px;
+      }
+
+      .editorial-rule {
+        height: 1px;
+        background: var(--border);
+        margin-bottom: 7px;
+      }
+
+      .editorial-body {
+        font-family: var(--font-serif);
+        font-size: 11.8px;
+        line-height: 1.42;
+        color: var(--ink-secondary);
+      }
+
+      .card-foot-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--ink-muted);
+      }
+
+      .mini-chip {
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: var(--surface-chip);
+        border: 1px solid var(--border);
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+
+      /* Card 2: In-Place Video Card */
+      .video-frame {
+        border: 1px solid var(--border);
+        background: var(--surface-subtle);
+        border-radius: 10px;
+        padding: 11px 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .video-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .video-title {
+        font-family: var(--font-sans);
+        font-size: 12.8px;
+        font-weight: 700;
+        color: var(--ink);
+        letter-spacing: -0.015em;
+      }
+
+      .video-dur {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--ink-muted);
+      }
+
+      .video-bars {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 12px;
+      }
+
+      .vbar {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--ink);
+      }
+
+      .video-subnote {
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        color: var(--ink-muted);
+      }
+
+      .video-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .watch-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+        font-family: var(--font-sans);
+        font-size: 11.2px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .watch-url {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+
+      /* Card 3: Embedded X Post Hydration */
+      .post-box {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 12px;
+        background: var(--surface-subtle);
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .post-author {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .post-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .post-name {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .post-handle {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--ink-muted);
+      }
+
+      .post-quote {
+        font-family: var(--font-sans);
+        font-size: 12px;
+        line-height: 1.44;
+        color: var(--ink-secondary);
+        padding-left: 10px;
+        border-left: 2px solid var(--ink);
+      }
+
+      /* Card 4: Monochrome Export Studio */
+      .studio-panel {
+        background: var(--surface-subtle);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 11px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .studio-chips {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+      }
+
+      .studio-chip {
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        font-weight: 600;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+
+      .studio-cli-line {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-family: var(--font-mono);
+        font-size: 10.2px;
+        font-weight: 500;
+        color: var(--ink-secondary);
+        white-space: nowrap;
+      }
+
+      .studio-cta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .studio-cta-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 13px;
+        border-radius: 8px;
+        background: var(--cta-bg);
+        color: var(--cta-fg);
+        font-family: var(--font-sans);
+        font-size: 11.2px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .studio-formats {
+        font-family: var(--font-mono);
+        font-size: 9.8px;
+        font-weight: 600;
+        color: var(--ink-muted);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="banner"
+      data-start="0"
+      data-duration="4.5"
+      data-width="1280"
+      data-height="640"
+    >
+      <div class="studio-grid" data-layout-ignore="true"></div>
+      <div class="studio-vignette" data-layout-ignore="true"></div>
+      <div class="studio-frame-rule" data-layout-ignore="true"></div>
+
+      <!-- Left Typographic Anchor -->
+      <section id="hero-clip" class="clip hero-clip" data-start="0" data-duration="4.5" data-track-index="0">
+        <div class="hero-inner">
+          <div class="brand-row hero-item">
+            <div class="brand-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="square">
+                <path d="M6 3h9l5 5v13H6z" />
+                <path d="M15 3v5h5" />
+                <path d="M9.5 13h7" />
+                <path d="M9.5 16.5h4.5" />
+              </svg>
+            </div>
+            <div class="accent-badge">
+              <span class="badge-dot"></span>
+              <span>OPEN SOURCE • CLI &amp; WEB STUDIO • PDF ENGINE</span>
+            </div>
+          </div>
+
+          <h1 class="headline hero-item">
+            XArticle <span class="headline-serif">PDF</span>
+          </h1>
+
+          <p class="lead hero-item">
+            Paste any X article or post link to export a cleanly structured, publication-grade editorial PDF.
+          </p>
+
+          <div class="action-pills hero-item">
+            <div class="action-pill">PASTE X LINK</div>
+            <div class="action-pill">WATCH ON X CARDS</div>
+            <div class="action-pill">A4 / LETTER PDF</div>
+          </div>
+
+          <div class="spec-strip hero-item">
+            <span>Newsreader · Inter · JetBrains Mono</span>
+            <span class="spec-sep"></span>
+            <span>FxTwitter + ego-browser</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Floating 3D UI Cards -->
+      <section id="cards-stage" class="clip cards-stage" data-start="0" data-duration="4.5" data-track-index="1">
+        <!-- Card 1: Clean Editorial Typography -->
+        <div class="card-slot card-slot-a">
+          <div id="card-a" class="ui-card">
+            <div class="card-head">
+              <span class="card-kicker">01 · EDITORIAL TYPE</span>
+              <span class="card-tag">DRAFT.JS AST</span>
+            </div>
+            <div class="editorial-sheet">
+              <div class="editorial-h1">Long-Form Publishing, Typeset</div>
+              <div class="editorial-rule"></div>
+              <div class="editorial-body">
+                Crisp serif and sans hierarchy, balanced margins, and zero social-feed clutter.
+              </div>
+            </div>
+            <div class="card-foot-row">
+              <span class="mini-chip">Offline WOFF2</span>
+              <span>Zero Clutter</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: In-Place Video Card -->
+        <div class="card-slot card-slot-b">
+          <div id="card-b" class="ui-card">
+            <div class="card-head">
+              <span class="card-kicker">02 · VIDEO CARD</span>
+              <span class="card-tag">REPLACES PLAYER</span>
+            </div>
+            <div class="video-frame">
+              <div class="video-meta-row">
+                <span class="video-title">Architecture Walkthrough</span>
+                <span class="video-dur">02:14</span>
+              </div>
+              <div class="video-bars" aria-hidden="true">
+                <span class="vbar" style="width: 36%"></span>
+                <span class="vbar" style="width: 18%; opacity: 0.45"></span>
+                <span class="vbar" style="width: 26%; opacity: 0.7"></span>
+                <span class="vbar" style="width: 12%; opacity: 0.35"></span>
+              </div>
+              <div class="video-subnote">Clickable PDF &amp; HTML link card</div>
+            </div>
+            <div class="video-action-row">
+              <span class="watch-pill">
+                <span>Watch on X</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 17L17 7" />
+                  <path d="M7 7h10v10" />
+                </svg>
+              </span>
+              <span class="watch-url">x.com/i/status/...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Embedded X Post Hydration -->
+        <div class="card-slot card-slot-c">
+          <div id="card-c" class="ui-card">
+            <div class="card-head">
+              <span class="card-kicker">03 · POST HYDRATION</span>
+              <span class="card-tag">TEXT-ONLY + QUOTES</span>
+            </div>
+            <div class="post-box">
+              <div class="post-author">
+                <div class="post-avatar">X</div>
+                <div>
+                  <div class="post-name">Editorial Systems</div>
+                  <div class="post-handle">@editorial_lab · Inline Post</div>
+                </div>
+              </div>
+              <div class="post-quote">
+                "Hydrates text-only posts, nested quotes, and polls inline—clean vector reading."
+              </div>
+            </div>
+            <div class="card-foot-row">
+              <span>Nested Quotes · Polls</span>
+              <span>Inline Vector</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Monochrome Export Studio -->
+        <div class="card-slot card-slot-d">
+          <div id="card-d" class="ui-card">
+            <div class="card-head">
+              <span class="card-kicker">04 · EXPORT STUDIO</span>
+              <span class="card-tag">WEB UI + CLI</span>
+            </div>
+            <div class="studio-panel">
+              <div class="studio-chips">
+                <span class="studio-chip">White Primary</span>
+                <span class="studio-chip">Strict B&amp;W</span>
+                <span class="studio-chip">A4 / Letter</span>
+              </div>
+              <div class="studio-cli-line">$ xarticle-pdf &lt;url&gt; --size A4</div>
+            </div>
+            <div class="studio-cta-row">
+              <span class="studio-cta-btn">
+                <span>Export PDF</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14" />
+                  <path d="M13 6l6 6-6 6" />
+                </svg>
+              </span>
+              <span class="studio-formats">PDF · HTML · MD · ZIP</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo(
+        ".hero-item",
+        { y: 12 },
+        { y: 0, duration: 0.8, ease: "power3.out", stagger: 0.1 },
+        0.0
+      );
+
+      tl.fromTo(
+        "#card-a",
+        { y: 18, scale: 0.96, rotation: -7.5 },
+        { y: 0, scale: 1, rotation: -5.4, duration: 0.9, ease: "power3.out" },
+        0.1
+      );
+
+      tl.fromTo(
+        "#card-b",
+        { y: 20, scale: 0.96, rotation: 6.8 },
+        { y: 0, scale: 1, rotation: 4.6, duration: 0.9, ease: "power3.out" },
+        0.25
+      );
+
+      tl.fromTo(
+        "#card-c",
+        { y: 20, scale: 0.96, rotation: 5.5 },
+        { y: 0, scale: 1, rotation: 3.6, duration: 0.9, ease: "power3.out" },
+        0.4
+      );
+
+      tl.fromTo(
+        "#card-d",
+        { y: 22, scale: 0.96, rotation: -6.2 },
+        { y: 0, scale: 1, rotation: -4.2, duration: 0.95, ease: "power3.out" },
+        0.55
+      );
+
+      tl.fromTo(
+        ".accent-badge",
+        { scale: 0.98 },
+        { scale: 1, duration: 0.5, ease: "power2.out" },
+        1.5
+      );
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["banner"] = tl;
+      tl.seek(2.5);
+    </script>
+  </body>
+</html>
