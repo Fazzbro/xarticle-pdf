@@ -58,9 +58,9 @@ function getPaperVars(paper: PaperPreset): string {
   --text-muted: #78716C;
   --border-subtle: #E2DDD2;
   --border-strong: #C9C1B2;
-  --accent: #0F62FE;
-  --accent-soft: #E8F0FE;
-  --quote-bar: #B45309;
+  --accent: #1C1917;
+  --accent-soft: #E5DFD2;
+  --quote-bar: #57534E;
 `;
     case "dark":
       return `

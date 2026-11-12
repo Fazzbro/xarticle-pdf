@@ -1,16 +1,16 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { motion, type HTMLMotionProps } from "motion/react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-3.5 shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium transition-colors disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-3.5 shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
   {
     variants: {
       variant: {
         default:
           "bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90",
         outline:
-          "border border-[var(--border)] bg-transparent text-[var(--foreground)] hover:bg-[var(--accent)]",
+          "border border-[var(--border)] bg-transparent text-[var(--foreground)] hover:border-[var(--foreground)]/40 hover:bg-[var(--accent)]",
         secondary:
           "bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)] hover:opacity-85",
         ghost:
@@ -31,12 +31,16 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<HTMLMotionProps<"button">, "ref">,
     VariantProps<typeof buttonVariants> {}
 
-export function Button({ className, variant, size, ...props }: ButtonProps) {
+export function Button({ className, variant, size, disabled, ...props }: ButtonProps) {
   return (
-    <button
+    <motion.button
+      whileHover={disabled ? undefined : { y: -0.5 }}
+      whileTap={disabled ? undefined : { scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 450, damping: 28 }}
+      disabled={disabled}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

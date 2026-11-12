@@ -107,8 +107,8 @@ function getPdfPalette(paper: RenderOptions["paper"]): PdfPalette {
       borderStrong: hexRgb("#C9C1B2"),
       ctaBg: hexRgb("#09090B"),
       ctaText: hexRgb("#FFFFFF"),
-      quoteBar: hexRgb("#09090B"),
-      linkColor: hexRgb("#0F62FE")
+      quoteBar: hexRgb("#57534E"),
+      linkColor: hexRgb("#1C1917")
     };
   }
   return {
