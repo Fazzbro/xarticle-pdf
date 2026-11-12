@@ -15,9 +15,11 @@ import {
   upgradeTwitterImageUrl,
   type DraftContentState
 } from "./draftjs.js";
-import type { ParsedXUrl } from "./url.js";
+import { parseXUrl, resolveShortUrlsInText, type ParsedXUrl } from "./url.js";
 
 const FXTWITTER_BASE = "https://api.fxtwitter.com";
+const VXTWITTER_BASE = "https://api.vxtwitter.com";
+const SYNDICATION_BASE = "https://cdn.syndication.twimg.com/tweet-result";
 const REQUEST_TIMEOUT_MS = 15000;
 
 interface FxFacet {
@@ -71,6 +73,9 @@ interface FxTweet {
   };
   created_at?: string;
   created_timestamp?: number;
+  replying_to?: string | null;
+  replying_to_status?: string | null;
+  is_note_tweet?: boolean;
   author?: FxAuthor;
   replies?: number;
   retweets?: number;
@@ -148,6 +153,51 @@ export async function fetchFxTweet(handle: string, id: string): Promise<FxTweet 
       return data.tweet;
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+interface SyndicationPayload {
+  text?: string;
+  note_tweet?: {
+    note_tweet_results?: {
+      result?: {
+        text?: string;
+      };
+    };
+  };
+  article?: {
+    id?: string;
+    title?: string;
+    preview_text?: string;
+    content_state?: DraftContentState;
+    content?: DraftContentState;
+    media_entities?: unknown;
+  };
+}
+
+function computeSyndicationToken(id: string): string {
+  return ((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, "");
+}
+
+async function fetchSyndicationFallback(id: string): Promise<SyndicationPayload | null> {
+  try {
+    const token = computeSyndicationToken(id);
+    const url = `${SYNDICATION_BASE}?id=${encodeURIComponent(id)}&lang=en&token=${encodeURIComponent(token)}`;
+    return await fetchJsonWithTimeout<SyndicationPayload>(url);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchVxTweetArticle(handle: string, id: string): Promise<FxTweet["article"] | null> {
+  const cleanHandle = handle && handle !== "i" ? handle : "i";
+  try {
+    const data = await fetchJsonWithTimeout<{ article?: FxTweet["article"] }>(
+      `${VXTWITTER_BASE}/${encodeURIComponent(cleanHandle)}/status/${encodeURIComponent(id)}`
+    );
+    return data.article ?? null;
   } catch {
     return null;
   }
@@ -378,12 +428,107 @@ function splitParagraphsToBlocks(text: string): ArticleBlock[] {
   }));
 }
 
-export async function extractViaFxTwitter(parsed: ParsedXUrl): Promise<{
+async function buildDocumentFromFxArticle(
+  article: NonNullable<FxTweet["article"]>,
+  tweet: FxTweet,
+  canonicalUrl: string,
+  author: AuthorProfile,
+  handle: string,
+  parsedId: string,
+  warnings: string[]
+): Promise<ArticleDocument> {
+  const compiled = compileDraftContentState(article.content!, article.media_entities, canonicalUrl);
+  const hydratedBlocks = await hydrateEmbeddedPosts(
+    compiled.blocks,
+    compiled.referencedTweetIds,
+    warnings
+  );
+
+  let coverMedia: ImageAsset | undefined;
+  const coverUrl =
+    article.cover_media?.media_info?.original_img_url ?? article.cover_media?.url;
+  if (coverUrl) {
+    coverMedia = {
+      url: upgradeTwitterImageUrl(coverUrl),
+      width: article.cover_media?.media_info?.original_img_width,
+      height: article.cover_media?.media_info?.original_img_height
+    };
+  }
+
+  return {
+    id: article.id ?? tweet.id ?? parsedId,
+    canonicalUrl,
+    title: article.title?.trim() || `Article by @${handle}`,
+    subtitle: undefined,
+    author,
+    publishedAt: article.created_at ?? tweet.created_at,
+    coverMedia,
+    blocks: hydratedBlocks,
+    stats: {
+      likes: tweet.likes,
+      reposts: tweet.retweets,
+      replies: tweet.replies,
+      views: tweet.views,
+      bookmarks: tweet.bookmarks
+    },
+    diagnostics: {
+      source: "fxtwitter",
+      extractedAt: new Date().toISOString(),
+      wordCount: 0,
+      readingTimeMinutes: 1,
+      imageCount: 0,
+      videoLinkCount: 0,
+      embeddedPostCount: 0,
+      embeddedPostsWithoutImagesCount: 0,
+      warnings
+    }
+  };
+}
+
+function collectCandidateXLinksFromTweet(tweet: FxTweet, rawText: string): string[] {
+  const candidates: string[] = [];
+  if (tweet.card?.url) candidates.push(tweet.card.url);
+  for (const f of tweet.raw_text?.facets ?? []) {
+    if (f.type === "url") {
+      if (f.replacement) candidates.push(f.replacement);
+      else if (f.original) candidates.push(f.original);
+    }
+  }
+  const urlMatches = rawText.match(/https?:\/\/[^\s]+/gi);
+  if (urlMatches) candidates.push(...urlMatches);
+  return Array.from(new Set(candidates));
+}
+
+function countRoughWords(blocks: ArticleBlock[]): number {
+  let words = 0;
+  for (const b of blocks) {
+    if ("runs" in b && Array.isArray(b.runs)) {
+      words += b.runs
+        .map((r) => r.text)
+        .join(" ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length;
+    }
+  }
+  return words;
+}
+
+export async function extractViaFxTwitter(
+  parsed: ParsedXUrl,
+  depth = 0,
+  visitedIds = new Set<string>()
+): Promise<{
   document: ArticleDocument | null;
   reason?: string;
 }> {
+  if (visitedIds.has(parsed.id)) {
+    return { document: null, reason: "Cyclic X URL reference detected." };
+  }
+  visitedIds.add(parsed.id);
+
   const warnings: string[] = [];
-  const tweet = await fetchFxTweet(parsed.handle, parsed.id);
+  let tweet = await fetchFxTweet(parsed.handle, parsed.id);
 
   if (!tweet) {
     return { document: null, reason: "FxTwitter returned no data for this URL." };
@@ -398,61 +543,70 @@ export async function extractViaFxTwitter(parsed: ParsedXUrl): Promise<{
     verifiedType: mapVerifiedType(tweet.author)
   };
 
-  // Case 1: Native X Article attached to status
-  if (tweet.article && tweet.article.content?.blocks?.length) {
-    const compiled = compileDraftContentState(
-      tweet.article.content,
-      tweet.article.media_entities,
-      canonicalUrl
-    );
-    const hydratedBlocks = await hydrateEmbeddedPosts(
-      compiled.blocks,
-      compiled.referencedTweetIds,
-      warnings
-    );
-
-    let coverMedia: ImageAsset | undefined;
-    const coverUrl =
-      tweet.article.cover_media?.media_info?.original_img_url ??
-      tweet.article.cover_media?.url;
-    if (coverUrl) {
-      coverMedia = {
-        url: upgradeTwitterImageUrl(coverUrl),
-        width: tweet.article.cover_media?.media_info?.original_img_width,
-        height: tweet.article.cover_media?.media_info?.original_img_height
+  // If FxTwitter returned article metadata without content blocks, enrich via Syndication / VxTwitter
+  if (tweet.article && !tweet.article.content?.blocks?.length) {
+    const [synd, vxArticle] = await Promise.all([
+      fetchSyndicationFallback(tweet.id ?? parsed.id),
+      fetchVxTweetArticle(handle, tweet.id ?? parsed.id)
+    ]);
+    const syndContent = synd?.article?.content ?? synd?.article?.content_state;
+    if (syndContent?.blocks?.length) {
+      tweet = {
+        ...tweet,
+        article: {
+          ...tweet.article,
+          title: tweet.article.title ?? synd?.article?.title,
+          content: syndContent,
+          media_entities: tweet.article.media_entities ?? synd?.article?.media_entities
+        }
+      };
+    } else if (vxArticle?.content?.blocks?.length) {
+      tweet = {
+        ...tweet,
+        article: {
+          ...tweet.article,
+          title: tweet.article.title ?? vxArticle.title,
+          content: vxArticle.content,
+          media_entities: tweet.article.media_entities ?? vxArticle.media_entities
+        }
       };
     }
+  }
 
-    return {
-      document: {
-        id: tweet.article.id ?? tweet.id ?? parsed.id,
-        canonicalUrl,
-        title: tweet.article.title?.trim() || `Article by @${handle}`,
-        subtitle: undefined,
-        author,
-        publishedAt: tweet.article.created_at ?? tweet.created_at,
-        coverMedia,
-        blocks: hydratedBlocks,
-        stats: {
-          likes: tweet.likes,
-          reposts: tweet.retweets,
-          replies: tweet.replies,
-          views: tweet.views,
-          bookmarks: tweet.bookmarks
-        },
-        diagnostics: {
-          source: "fxtwitter",
-          extractedAt: new Date().toISOString(),
-          wordCount: 0,
-          readingTimeMinutes: 1,
-          imageCount: 0,
-          videoLinkCount: 0,
-          embeddedPostCount: 0,
-          embeddedPostsWithoutImagesCount: 0,
-          warnings
-        }
-      }
+  // Case 1: Native X Article attached to status
+  if (tweet.article?.content?.blocks?.length) {
+    const doc = await buildDocumentFromFxArticle(
+      tweet.article,
+      tweet,
+      canonicalUrl,
+      author,
+      handle,
+      parsed.id,
+      warnings
+    );
+    return { document: doc };
+  }
+
+  // Case 1b: Quoted status contains a full Native X Article (outer post is just a teaser/comment)
+  if (tweet.quote?.article?.content?.blocks?.length) {
+    const qHandle = tweet.quote.author?.screen_name ?? handle;
+    const qCanonical = `https://x.com/${qHandle}/status/${tweet.quote.id ?? parsed.id}`;
+    const qAuthor: AuthorProfile = {
+      name: tweet.quote.author?.name ?? qHandle,
+      handle: qHandle,
+      avatarUrl: tweet.quote.author?.avatar_url,
+      verifiedType: mapVerifiedType(tweet.quote.author)
     };
+    const doc = await buildDocumentFromFxArticle(
+      tweet.quote.article,
+      tweet.quote,
+      qCanonical,
+      qAuthor,
+      qHandle,
+      tweet.quote.id ?? parsed.id,
+      warnings
+    );
+    return { document: doc };
   }
 
   // If URL was explicitly /article/ or /i/article/, we shouldn't settle for a teaser tweet — signal fallback!
@@ -463,17 +617,101 @@ export async function extractViaFxTwitter(parsed: ParsedXUrl): Promise<{
     };
   }
 
-  // Case 2: Long-form status / note_tweet (no article object, e.g. user pasted a long post)
-  const rawText = tweet.raw_text?.text ?? tweet.text ?? "";
+  // Case 2: Long-form status / note_tweet OR teaser linking to an X Article OR self-thread
+  let rawText = tweet.raw_text?.text ?? tweet.text ?? "";
+
+  // Check if short post links to an embedded/referenced X Article (via t.co or x.com URL)
+  const rawWords = rawText.trim().split(/\s+/).filter(Boolean).length;
+  if (depth < 1 && rawWords < 200) {
+    const candidates = collectCandidateXLinksFromTweet(tweet, rawText);
+    if (candidates.length > 0) {
+      const expandedText = await resolveShortUrlsInText(candidates.join("\n"));
+      for (const candidateLine of expandedText.split(/\r?\n/)) {
+        const linkedParsed = parseXUrl(candidateLine);
+        if (linkedParsed && !visitedIds.has(linkedParsed.id)) {
+          const linkedResult = await extractViaFxTwitter(linkedParsed, depth + 1, visitedIds);
+          if (linkedResult.document) {
+            const linkedWords = countRoughWords(linkedResult.document.blocks);
+            if (linkedWords > rawWords * 1.4 || linkedResult.document.blocks.some((b) => b.type === "heading")) {
+              return linkedResult;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Check X Syndication for fuller note_tweet text if FxTwitter returned a short/truncated body
+  if (rawWords < 140) {
+    const synd = await fetchSyndicationFallback(tweet.id ?? parsed.id);
+    const noteText = synd?.note_tweet?.note_tweet_results?.result?.text;
+    if (noteText && noteText.length > rawText.length + 20) {
+      rawText = noteText;
+    }
+  }
+
+  // If tweet.article metadata existed with only preview_text (login-gated / incomplete public payload),
+  // surface full preview + explicit warning instead of silently truncating
+  if (tweet.article?.preview_text && !rawText.includes(tweet.article.preview_text.slice(0, 30))) {
+    rawText = [rawText, tweet.article.preview_text].filter(Boolean).join("\n\n");
+    warnings.push(
+      "X only exposed an article preview snippet publicly without authentication; full article blocks may require local browser fallback."
+    );
+  }
+
   if (!rawText && !tweet.media?.photos?.length && !tweet.media?.videos?.length) {
     return { document: null, reason: "Tweet has no extractable article or text content." };
   }
 
-  warnings.push(
-    "This link resolved to a standard/long-form X post rather than a native X Article container; formatted cleanly as an article."
-  );
+  // Unroll self-thread ancestors if pasted link points to a reply in an author's thread
+  const ancestorTweets: FxTweet[] = [];
+  if (depth === 0 && tweet.replying_to_status && tweet.replying_to?.toLowerCase() === handle.toLowerCase()) {
+    let curReplyId: string | null | undefined = tweet.replying_to_status;
+    let steps = 0;
+    while (curReplyId && steps < 15 && !visitedIds.has(curReplyId)) {
+      visitedIds.add(curReplyId);
+      const parent = await fetchFxTweet(handle, curReplyId);
+      if (!parent) break;
+      if ((parent.author?.screen_name ?? "").toLowerCase() !== handle.toLowerCase()) break;
+      ancestorTweets.unshift(parent);
+      curReplyId =
+        parent.replying_to_status && parent.replying_to?.toLowerCase() === handle.toLowerCase()
+          ? parent.replying_to_status
+          : null;
+      steps += 1;
+    }
+  }
 
-  const blocks: ArticleBlock[] = splitParagraphsToBlocks(rawText);
+  if (ancestorTweets.length > 0) {
+    warnings.push(`Stitched ${ancestorTweets.length + 1} sequential thread posts by @${handle}.`);
+  } else {
+    warnings.push(
+      "This link resolved to a standard/long-form X post rather than a native X Article container; formatted cleanly as an article."
+    );
+  }
+
+  const blocks: ArticleBlock[] = [];
+  for (const prevTweet of ancestorTweets) {
+    const prevText = prevTweet.raw_text?.text ?? prevTweet.text ?? "";
+    if (prevText) {
+      blocks.push(...splitParagraphsToBlocks(prevText));
+    }
+    if (prevTweet.media?.photos?.length) {
+      const imgs: ImageAsset[] = prevTweet.media.photos
+        .filter((p) => Boolean(p.url))
+        .map((p) => ({
+          url: upgradeTwitterImageUrl(p.url!),
+          alt: p.altText,
+          width: p.width,
+          height: p.height
+        }));
+      if (imgs.length === 1) blocks.push({ type: "image", image: imgs[0] });
+      else if (imgs.length > 1) blocks.push({ type: "image_grid", images: imgs });
+    }
+    blocks.push({ type: "divider" });
+  }
+
+  blocks.push(...splitParagraphsToBlocks(rawText));
 
   if (tweet.media?.photos?.length) {
     const imgs: ImageAsset[] = tweet.media.photos

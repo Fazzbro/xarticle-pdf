@@ -157,6 +157,24 @@ html, body {
   }
 }
 
+@media screen and (max-width: 560px) {
+  body {
+    padding: 14px 10px 32px;
+  }
+  .article-shell {
+    padding: 26px 20px;
+    border-radius: 6px;
+  }
+  .video-link-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .video-cta {
+    text-align: center;
+  }
+}
+
 @media print {
   body {
     background: var(--bg-page);

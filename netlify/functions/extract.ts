@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ArticleDocument } from "../../src/core/types.js";
 import { extractArticleCloud } from "../../src/extractor/cloud.js";
-import { extractXUrlsFromText } from "../../src/extractor/url.js";
+import { extractXUrlsFromText, resolveShortUrlsInText } from "../../src/extractor/url.js";
 
 const RequestSchema = z.object({
   input: z.string().min(1, "Please paste at least one X link."),
@@ -39,7 +39,8 @@ export default async function handler(req: Request): Promise<Response> {
     );
   }
 
-  const { urls, invalidLines } = extractXUrlsFromText(parsedBody.data.input);
+  const expandedInput = await resolveShortUrlsInText(parsedBody.data.input);
+  const { urls, invalidLines } = extractXUrlsFromText(expandedInput);
   if (urls.length === 0) {
     return Response.json(
       {

@@ -40,6 +40,12 @@ describe("parseXUrl", () => {
     expect(res?.handle).toBe("jack");
   });
 
+  it("strips zero-width mobile copy/paste characters and parses mobile.twitter.com links", () => {
+    const res = parseXUrl("\u200Bhttps://mobile.twitter.com/user/status/1895149257824633229?s=46\u200E");
+    expect(res?.normalizedUrl).toBe("https://x.com/user/status/1895149257824633229");
+    expect(res?.id).toBe("1895149257824633229");
+  });
+
   it("rejects non-X domains and profile-only URLs", () => {
     expect(parseXUrl("https://example.com/user/status/123456789")).toBeNull();
     expect(parseXUrl("https://x.com/elonmusk")).toBeNull();

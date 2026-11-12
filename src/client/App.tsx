@@ -49,7 +49,7 @@ const DEFAULT_OPTIONS: RenderOptions = {
 
 function countInputLinks(text: string): number {
   const matches = text.match(
-    /https?:\/\/(?:www\.|mobile\.)?(?:x|twitter|fxtwitter|fixupx|vxtwitter|fixvx)\.com\/[^\s]+/gi
+    /https?:\/\/(?:(?:www\.|mobile\.)?(?:x|twitter|fxtwitter|fixupx|vxtwitter|fixvx)\.com|t\.co)\/[^\s]+/gi
   );
   return matches ? matches.length : 0;
 }
@@ -86,6 +86,7 @@ export default function App() {
   });
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewSectionRef = useRef<HTMLElement>(null);
   const [urlInput, setUrlInput] = useState("");
   const [allowBrowserFallback, setAllowBrowserFallback] = useState(true);
   const [extracting, setExtracting] = useState(false);
@@ -99,6 +100,18 @@ export default function App() {
   const [options, setOptions] = useState<RenderOptions>(DEFAULT_OPTIONS);
   const [previewHtml, setPreviewHtml] = useState("");
   const [zoom, setZoom] = useState<"fit" | "0.85" | "1">("fit");
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+  const [mobileIframeHeight, setMobileIframeHeight] = useState<number>(640);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const activeArticle = articles[activeIndex] ?? null;
   const detectedLinkCount = useMemo(() => countInputLinks(urlInput), [urlInput]);
@@ -302,8 +315,20 @@ export default function App() {
   };
 
   const handleIframeLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
-    const doc = e.currentTarget.contentDocument;
+    const iframe = e.currentTarget;
+    const doc = iframe.contentDocument;
     if (!doc) return;
+
+    const syncHeight = () => {
+      const h = Math.max(doc.documentElement?.scrollHeight ?? 0, doc.body?.scrollHeight ?? 0);
+      if (h > 200) {
+        setMobileIframeHeight(h + 24);
+      }
+    };
+    syncHeight();
+    setTimeout(syncHeight, 250);
+    setTimeout(syncHeight, 1000);
+
     doc.addEventListener("click", (ev) => {
       const target = ev.target as HTMLElement | null;
       const anchor = target?.closest("a");
@@ -320,12 +345,12 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col bg-[var(--background)] text-[var(--foreground)]">
+    <div className="flex min-h-screen w-full flex-col bg-[var(--background)] text-[var(--foreground)] lg:h-screen lg:overflow-hidden">
       {/* Top Monochrome Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--card)] px-4">
-        <div className="flex items-center gap-3">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
           <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--primary)] text-[var(--primary-foreground)]"
             aria-label="XArticle PDF mark"
           >
             <svg viewBox="0 0 24 24" fill="none" className="h-4.5 w-4.5" aria-hidden="true">
@@ -344,26 +369,26 @@ export default function App() {
               />
             </svg>
           </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <TextEffect as="h1" per="char" preset="fade-in-blur" className="text-sm font-bold tracking-tight">
+          <div className="flex min-w-0 flex-col">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <TextEffect as="h1" per="char" preset="fade-in-blur" className="truncate text-sm font-bold tracking-tight">
                 XArticle PDF
               </TextEffect>
-              <Badge variant="secondary" className="font-mono text-[10px]">
+              <Badge variant="secondary" className="shrink-0 font-mono text-[10px]">
                 v1.0
               </Badge>
             </div>
-            <span className="text-[11px] text-[var(--muted-foreground)]">
+            <span className="hidden text-[11px] text-[var(--muted-foreground)] sm:block">
               Monochrome Editorial Exporter
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <Badge id="healthBadge" variant="outline" className="gap-1.5 py-1">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+          <Badge id="healthBadge" variant="outline" className="gap-1.5 whitespace-nowrap py-1">
             <span
               className={cn(
-                "h-1.5 w-1.5 rounded-full",
+                "h-1.5 w-1.5 shrink-0 rounded-full",
                 health.ready ? "bg-[var(--foreground)]" : "bg-[var(--muted-foreground)]"
               )}
             />
@@ -383,10 +408,10 @@ export default function App() {
       </header>
 
       {/* Main Split Workspace */}
-      <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[400px_1fr]">
+      <main className="flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-[400px_1fr]">
         {/* Left Control Sidebar */}
-        <aside className="flex min-h-0 flex-col border-b border-[var(--border)] bg-[var(--card)] lg:border-r lg:border-b-0">
-          <div className="flex-1 space-y-3.5 overflow-y-auto p-4">
+        <aside className="flex flex-col border-b border-[var(--border)] bg-[var(--card)] lg:min-h-0 lg:border-r lg:border-b-0">
+          <div className="space-y-3.5 p-4 lg:flex-1 lg:overflow-y-auto">
             {/* Step 1: Paste Links */}
             <Card className="overflow-hidden">
               <Spotlight />
@@ -485,13 +510,29 @@ export default function App() {
                     id="statusBanner"
                     role="status"
                     className={cn(
-                      "rounded-lg border px-3 py-2 text-xs leading-snug",
+                      "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs leading-snug",
                       status.kind === "error"
                         ? "border-[var(--foreground)] bg-[var(--secondary)] font-medium text-[var(--foreground)]"
                         : "border-[var(--border)] bg-[var(--background)] text-[var(--foreground)]"
                     )}
                   >
-                    {status.msg}
+                    <span>{status.msg}</span>
+                    {!isDesktop && previewHtml && status.kind === "success" && (
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() =>
+                          previewSectionRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start"
+                          })
+                        }
+                      >
+                        Read Article ↓
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -682,7 +723,7 @@ export default function App() {
           </div>
 
           {/* Sticky Bottom Export Bar */}
-          <div className="sticky bottom-0 z-10 space-y-2 border-t border-[var(--border)] bg-[var(--card)] p-4">
+          <div className="space-y-2 border-t border-[var(--border)] bg-[var(--card)] p-4 lg:sticky lg:bottom-0 lg:z-10">
             <RaisedButton
               id="exportPdfBtn"
               type="button"
@@ -728,9 +769,13 @@ export default function App() {
         </aside>
 
         {/* Right Live Print Preview Canvas */}
-        <section className="flex min-h-0 min-w-0 flex-col bg-[var(--canvas)]">
-          <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--card)] px-4">
-            <div id="previewTitle" className="truncate text-xs font-semibold">
+        <section
+          ref={previewSectionRef}
+          id="previewSection"
+          className="flex min-h-[75dvh] min-w-0 flex-col bg-[var(--canvas)] lg:min-h-0"
+        >
+          <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 py-1.5 sm:px-4">
+            <div id="previewTitle" className="min-w-0 flex-1 truncate text-xs font-semibold">
               {activeArticle ? activeArticle.title : "Live Print Preview"}
             </div>
             <div className="flex items-center gap-2">
@@ -857,7 +902,7 @@ export default function App() {
               </Card>
             </div>
           ) : (
-            <div className="relative min-h-0 flex-1 overflow-auto">
+            <div className="relative flex-1 overflow-auto lg:min-h-0">
               <iframe
                 ref={iframeRef}
                 id="previewFrame"
@@ -865,15 +910,24 @@ export default function App() {
                 srcDoc={previewHtml}
                 onLoad={handleIframeLoad}
                 sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation allow-modals"
-                className="h-full w-full origin-top border-0 bg-[#eaecef]"
+                className="w-full origin-top border-0 bg-[#eaecef] lg:h-full"
                 style={
-                  zoom === "fit"
-                    ? undefined
-                    : {
-                        transform: `scale(${zoom})`,
-                        width: `${(100 / Number(zoom)).toFixed(2)}%`,
-                        height: `${(100 / Number(zoom)).toFixed(2)}%`
-                      }
+                  isDesktop
+                    ? zoom === "fit"
+                      ? undefined
+                      : {
+                          transform: `scale(${zoom})`,
+                          width: `${(100 / Number(zoom)).toFixed(2)}%`,
+                          height: `${(100 / Number(zoom)).toFixed(2)}%`
+                        }
+                    : zoom === "fit"
+                      ? { height: `${mobileIframeHeight}px`, minHeight: "75dvh" }
+                      : {
+                          transform: `scale(${zoom})`,
+                          width: `${(100 / Number(zoom)).toFixed(2)}%`,
+                          height: `${mobileIframeHeight}px`,
+                          minHeight: "75dvh"
+                        }
                 }
               />
             </div>

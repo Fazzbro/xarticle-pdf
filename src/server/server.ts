@@ -6,7 +6,7 @@ import { z } from "zod";
 import { DEFAULT_RENDER_OPTIONS, type ArticleDocument, type RenderOptions } from "../core/types.js";
 import { extractArticle } from "../extractor/index.js";
 import { fetchProxiedMedia } from "../extractor/media-proxy.js";
-import { extractXUrlsFromText } from "../extractor/url.js";
+import { extractXUrlsFromText, resolveShortUrlsInText } from "../extractor/url.js";
 import { buildArticleHtml } from "../renderer/html-builder.js";
 import { buildArticleMarkdown } from "../renderer/markdown.js";
 import { buildPdfFilename, findBrowserExecutable, generateArticlePdf } from "../renderer/pdf-generator.js";
@@ -97,7 +97,8 @@ export function createApp(): Express {
       return;
     }
 
-    const { urls, invalidLines } = extractXUrlsFromText(parsedBody.data.input);
+    const expandedInput = await resolveShortUrlsInText(parsedBody.data.input);
+    const { urls, invalidLines } = extractXUrlsFromText(expandedInput);
     if (urls.length === 0) {
       res.status(400).json({
         error: "No valid X/Twitter article or post links found.",

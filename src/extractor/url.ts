@@ -29,7 +29,8 @@ const ALLOWED_HOSTS = new Set([
  * Parses a single X/Twitter status or article URL into a normalized descriptor.
  */
 export function parseXUrl(input: string): ParsedXUrl | null {
-  const trimmed = input.trim().replace(/^[<("'`]+|[>)"'`,.;!?]+$/g, "");
+  const cleaned = input.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF]/g, "").trim();
+  const trimmed = cleaned.replace(/^[<("'`]+|[>)"'`,.;!?]+$/g, "");
   if (!trimmed) return null;
 
   let url: URL;
@@ -161,4 +162,45 @@ export function extractStatusIdFromUrl(url: string): string | null {
     return parsed.id;
   }
   return null;
+}
+
+/**
+ * Resolves any `https://t.co/...` shortlinks in pasted text safely (only t.co origin)
+ * to their expanded X/Twitter destination URLs.
+ */
+export async function resolveShortUrlsInText(text: string): Promise<string> {
+  const shortMatches = text.match(/https?:\/\/t\.co\/[A-Za-z0-9]+/gi);
+  if (!shortMatches || shortMatches.length === 0) return text;
+
+  const unique = Array.from(new Set(shortMatches)).slice(0, 10);
+  const replacements = new Map<string, string>();
+
+  await Promise.all(
+    unique.map(async (shortUrl) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const res = await fetch(shortUrl, {
+          method: "GET",
+          redirect: "manual",
+          signal: controller.signal,
+          headers: { "User-Agent": "xarticle-pdf/1.0" }
+        });
+        const loc = res.headers.get("location");
+        if (loc && parseXUrl(loc)) {
+          replacements.set(shortUrl, loc);
+        }
+      } catch {
+        // Leave unresolved cleanly
+      } finally {
+        clearTimeout(timer);
+      }
+    })
+  );
+
+  let out = text;
+  for (const [shortUrl, expanded] of replacements.entries()) {
+    out = out.split(shortUrl).join(expanded);
+  }
+  return out;
 }
